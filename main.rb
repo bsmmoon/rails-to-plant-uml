@@ -10,37 +10,65 @@ require 'active_support/inflector'
 
 class Main
   def self.run
-    language = ARGV[0]
-    case language
-    when 'ruby'
+    extension = ARGV[0]
+    case extension
+    when '.rb'
       include RubyParser
-    when 'go'
+    when '.go'
+      include GoParser
     end
-    filenames = Dir["#{ARGV[1]}**/*"].reject {|fn| File.directory?(fn) }
-    puts filenames.map{|filename| Main.new.run(preprocess(read_file(filename)))}
+    filenames = Dir["#{ARGV[1]}**/*#{extension}"].reject {|fn| File.directory?(fn) }
+    puts filenames.map{|filename| Main.new.run(filename)}.reject(&:nil?)
   end
 
   BLACKLIST = Set.new %w'ActiveSupportConcern'
 
-  def self.preprocess(file)
-    file.
-      encode('UTF-8', 'binary', invalid: :replace, undef: :replace, replace: '').
-      split("\n").
-      map(&:strip).
-      join("\n").
-      gsub(",\n", ', ').
-      split("\n")
-  end
-
-  def self.read_file(filename)
+  def read_file(filename)
     file = File.open(filename, "r")
     data = file.read
     file.close
     data  
   end
 
+  module GoParser
+    def preprocess(file)
+      file.
+        encode('UTF-8', 'binary', invalid: :replace, undef: :replace, replace: '').
+        split("\n").
+        map(&:strip).
+        join("\n").
+        gsub(",\n", ', ')
+    end
+  
+    def run(filename)
+
+      filter = ARGV[2]
+      file = preprocess(file)
+      package = file.split("package ")[1].split("\n")[0]
+      partners = file.split("import (\n")[1]
+      return if partners.nil?
+      partners.split(")")[0].split("\n").map do |partner|
+        next if !filter.nil? && !partner.include?(filter)
+        partner = partner.strip.gsub(filter, '')
+        "#{package} -- #{partner} : > include"
+      end.reject(&:nil?)
+    end
+  end
+
   module RubyParser
-    def run(lines)
+    def preprocess(file)
+      file.
+        encode('UTF-8', 'binary', invalid: :replace, undef: :replace, replace: '').
+        split("\n").
+        map(&:strip).
+        join("\n").
+        gsub(",\n", ', ').
+        split("\n")
+    end
+  
+    def run(filename)
+      lines = preprocess(read_file(filename))
+
       klass = ''
       lines.map do |line|
         tokens = line.strip.split(' ')
