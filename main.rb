@@ -1,3 +1,4 @@
+require 'byebug'
 =begin
   TODO
   -[x] If line ends with ",", it should be merged with the previous line
@@ -18,7 +19,8 @@ class Main
       include GoParser
     end
     filenames = Dir["#{ARGV[1]}**/*#{extension}"].reject {|fn| File.directory?(fn) }
-    puts filenames.map{|filename| Main.new.run(filename)}.reject(&:nil?)
+    output = filenames.map{|filename| Main.new.run(filename)}.reject(&:nil?).uniq
+    puts output
   end
 
   BLACKLIST = Set.new %w'ActiveSupportConcern'
@@ -41,15 +43,21 @@ class Main
     end
   
     def run(filename)
-
       filter = ARGV[2]
-      file = preprocess(file)
+      file = preprocess(read_file(filename))
       package = file.split("package ")[1].split("\n")[0]
       partners = file.split("import (\n")[1]
       return if partners.nil?
       partners.split(")")[0].split("\n").map do |partner|
-        next if !filter.nil? && !partner.include?(filter)
-        partner = partner.strip.gsub(filter, '')
+        if !filter.nil?
+          next unless partner.include?(filter)
+          partner = partner.gsub(filter, '')
+        end
+        partner = partner.strip
+        partner = "\"#{partner.split("\"")[1...].join}\"" if partner.include? "\""
+        next if partner.empty?
+        next if package.include?("test")
+        next if partner.include?("github.com")
         "#{package} -- #{partner} : > include"
       end.reject(&:nil?)
     end
